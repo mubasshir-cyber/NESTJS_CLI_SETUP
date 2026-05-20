@@ -1,6 +1,6 @@
 {
   "name": "create-giga-system",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enterprise NestJS Generator",
   "type": "module",
   "main": "./bin/index.js",
