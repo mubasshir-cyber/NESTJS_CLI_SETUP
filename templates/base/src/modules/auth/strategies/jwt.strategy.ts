@@ -1,47 +1,38 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-
+import { AuthService } from '../auth.service';
 import { PassportStrategy } from '@nestjs/passport';
-
 import { ExtractJwt, Strategy } from 'passport-jwt';
-
-import { ConfigService } from '@nestjs/config';
-
-import { UsersService } from '../../../modules/users/users.service.js';
+import type { ConfigType } from '@nestjs/config';
+import { Inject, Injectable } from '@nestjs/common';
+import jwtConfig from 'src/config/jwt.config';
+import { AuthJwtPayload } from '../types/auth-jwtPayload';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private configService: ConfigService,
-    private usersService: UsersService,
+    @Inject(jwtConfig.KEY)
+    private jwtConfiguration: ConfigType<typeof jwtConfig>,
+    private authService: AuthService,
+    // @InjectRepository(User)
+    // private readonly userRepo: Repository<User>,
   ) {
-    const jwtSecret = configService.get<string>('JWT_SECRET');
-
-    if (!jwtSecret) {
-      throw new Error('JWT_SECRET missing in .env');
-    }
-
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-
+      secretOrKey: jwtConfiguration.secret as string,
       ignoreExpiration: false,
-
-      secretOrKey: jwtSecret,
     });
   }
 
-  async validate(payload: any) {
-    const user = await this.usersService.findByEmail(payload.email);
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role.name,
-
-      permissions: user.role?.permissions?.map((p) => p.name) ?? [],
-    };
+  async validate(payload: AuthJwtPayload) {
+    const userId = payload.sub;
+    return this.authService.validateJWTUser(userId);
   }
+  // async validate(payload: any) {
+  //   return await this.userRepo.findOne({
+  //     where: { id: payload.sub },
+  //     relations: ['role'],
+  //   });
+  // }
 }
+
+// async validate(payload: any) {
+//   return payload; // becomes req.user

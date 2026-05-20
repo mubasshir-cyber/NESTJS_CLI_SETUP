@@ -1,101 +1,200 @@
-import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
-  ConflictException,
+  BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-
-import { User } from './entities/user.entity.js';
-import { Role } from '../roles/entities/role.entity.js';
-import { CreateUserDto } from './dto/create-user.dto.js';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { ILike, Repository } from 'typeorm';
+import { User } from './entities/user.entity';
+import { Role } from '../role/entities/role.entity';
+import { PaginationDto } from '../project/dto/pagination.dto';
 
 @Injectable()
-export class UsersService {
+export class UserService {
   constructor(
     @InjectRepository(User)
-    private userRepository: Repository<User>,
-
+    private repo: Repository<User>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
+    private roleRepo: Repository<Role>,
   ) {}
 
+  async updateHashedreFreshToken(
+    userId: string,
+    hashedRefreshToken: string | null,
+  ) {
+    return await this.repo.update({ id: userId }, { hashedRefreshToken });
+  }
+
   async create(dto: CreateUserDto) {
-    const exists = await this.userRepository.findOne({
-      where: { email: dto.email },
-    });
-
-    if (exists) {
-      throw new ConflictException('Email already exists');
-    }
-
-    const role = await this.roleRepository.findOne({
-      where: { id: dto.role_id },
+    const roleName = (dto.role || 'employee').toLowerCase();
+    const role = await this.roleRepo.findOne({
+      where: { name: roleName },
     });
 
     if (!role) {
-      throw new NotFoundException('Role not found');
+      throw new NotFoundException(`Role '${roleName}' not found`);
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-    const user = this.userRepository.create({
-      ...dto,
-      password: hashedPassword,
+    const email = dto.email.toLowerCase().trim();
+    const existingUser = await this.repo.findOne({
+      where: { email },
     });
 
-    return await this.userRepository.save(user);
-  }
+    if (existingUser) {
+      throw new BadRequestException('Email already exists');
+    }
 
-  async findAll(page = 1, limit = 10, search?: string) {
-    // const query = this.userRepository.createQueryBuilder(`users`);
-    // if (search) {
-    //   query.andWhere({});
-    // }
+    const user = this.repo.create({
+      ...dto,
+      email,
+      role,
+    });
 
-    return this.userRepository.find({
+    const savedUser = await this.repo.save(user);
+
+    return this.repo.findOne({
+      where: { id: savedUser.id },
       relations: ['role'],
     });
   }
 
-  async findByEmail(email: string) {
-    return this.userRepository.findOne({
-      where: {
-        email,
-      },
+  async findAll(pagination?: PaginationDto) {
+    const page = pagination?.page ?? 1;
+    const limit = Math.min(pagination?.limit ?? 10, 50); // prevent abuse
 
-      relations: ['role', 'role.permissions'],
+    const [employee, total] = await this.repo.findAndCount({
+      relations: ['role'],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { createdAt: 'DESC' }, // optional but recommended
+    });
+
+    return {
+      employee,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findByEmail(email: string) {
+    return await this.repo.findOne({
+      where: {
+        email: ILike(email),
+      },
+      relations: ['role'],
     });
   }
 
-  async findOne(id: string): Promise<User> {
-    const user = await this.userRepository.findOne({
+  async findProfile(id: string) {
+    return await this.repo.findOne({
       where: { id },
+      relations: ['role'],
+    });
+  }
 
-      relations: ['role', 'role.permissions'],
+  async findOne(id: string) {
+    const user = await this.repo.findOne({
+      where: { id },
+      relations: ['role'],
+      select: ['id', 'first_name', 'last_name', 'email', 'hashedRefreshToken'],
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    return {
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      hashedRefreshToken: user.hashedRefreshToken,
+      role: user.role,
+    };
   }
 
-  async update(id: string, data: Partial<User>) {
-    await this.userRepository.update(id, data);
+  async update(id: string, dto: UpdateUserDto) {
+    const user = await this.repo.findOne({
+      where: { id },
+      relations: ['role'],
+    });
 
-    return this.findOne(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // first_name
+    if (dto.first_name) {
+      user.first_name = dto.first_name.trim();
+    }
+
+    // last_name
+    if (dto.last_name) {
+      user.last_name = dto.last_name.trim();
+    }
+
+    // mobile
+    if (dto.mobile) {
+      user.mobile = dto.mobile.trim();
+    }
+
+    // email
+    if (dto.email) {
+      user.email = dto.email.toLowerCase().trim();
+    }
+
+    // password
+    if (dto.password) {
+      user.password = dto.password;
+      // BeforeUpdate hook will hash it
+    }
+
+    // role
+    if (dto.role && user.role?.name !== dto.role.toLowerCase()) {
+      const role = await this.roleRepo.findOne({
+        where: { name: dto.role.toLowerCase() },
+      });
+
+      if (!role) {
+        throw new BadRequestException('Invalid role');
+      }
+
+      user.role = role;
+    }
+
+    // last login
+    if (dto.lastLoginAt) {
+      user.lastLoginAt = dto.lastLoginAt;
+    }
+
+    return await this.repo.save(user);
   }
 
   async remove(id: string) {
-    const user = await this.findOne(id);
+    const user = await this.repo.findOne({
+      where: { id },
+    });
 
-    await this.userRepository.remove(user);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.repo.remove(user);
 
     return {
       message: 'User deleted successfully',
     };
-  }   
+  }
+
+  async updateLastLogin(userId: string) {
+    await this.repo.update(userId, {
+      lastLoginAt: new Date(),
+    });
+  }
 }

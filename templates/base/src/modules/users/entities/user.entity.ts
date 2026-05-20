@@ -1,14 +1,19 @@
+import { Role } from '../../role/entities/role.entity';
 import {
   Entity,
-  PrimaryGeneratedColumn,
   Column,
+  PrimaryGeneratedColumn,
+  BeforeInsert,
   ManyToOne,
   JoinColumn,
+  ManyToMany,
+  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  BeforeUpdate,
 } from 'typeorm';
-
-import { Role } from '../../../modules/roles/entities/role.entity.js';
+import * as bcrypt from 'bcrypt';
+import { Exclude } from 'class-transformer';
 
 @Entity('users')
 export class User {
@@ -16,27 +21,44 @@ export class User {
   id!: string;
 
   @Column()
-  name!: string;
+  first_name!: string;
+
+  @Column()
+  last_name!: string;
+
+  @Column({ nullable: true })
+  mobile!: string;
 
   @Column({ unique: true })
   email!: string;
 
+  @Exclude()
   @Column()
   password!: string;
 
-  @Column({ nullable: true })
-  refreshToken!: string;
+  @Column({
+    type: 'varchar',
+    nullable: true,
+  })
+  hashedRefreshToken?: string | null;
 
-  @Column()
-  role_id!: string;
-
-  @ManyToOne(() => Role, (role) => role.users)
+  @ManyToOne(() => Role)
   @JoinColumn({ name: 'role_id' })
   role!: Role;
+
+  @Column({ nullable: true })
+  lastLoginAt!: Date;
 
   @CreateDateColumn()
   createdAt!: Date;
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  async hashPassword() {
+    this.password = await bcrypt.hash(this.password, 10);
+  }
+
 }
