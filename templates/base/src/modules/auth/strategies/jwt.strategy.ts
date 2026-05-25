@@ -1,38 +1,41 @@
-import { AuthService } from '../auth.service';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import type { ConfigService, ConfigType } from '@nestjs/config';
+
 import { PassportStrategy } from '@nestjs/passport';
+
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import type { ConfigType } from '@nestjs/config';
-import { Inject, Injectable } from '@nestjs/common';
-import jwtConfig from 'src/config/jwt.config';
-import { AuthJwtPayload } from '../types/auth-jwtPayload';
+
+import jwtConfig from '../../../config/jwt.config';
+import { EmployeesService } from 'src/modules/employees/employees.service';
+import { JwtPayload } from '../types/jwt-payload.type';
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class AccessTokenStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     @Inject(jwtConfig.KEY)
-    private jwtConfiguration: ConfigType<typeof jwtConfig>,
-    private authService: AuthService,
-    // @InjectRepository(User)
-    // private readonly userRepo: Repository<User>,
+    private configService: ConfigType<typeof jwtConfig>,
+    private employeesService: EmployeesService,
+    //  configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: jwtConfiguration.secret as string,
+      secretOrKey: configService.secret as string,
+      // secretOrKey: configService.get<string>('JWT_SECRET'),
       ignoreExpiration: false,
     });
   }
 
-  async validate(payload: AuthJwtPayload) {
-    const userId = payload.sub;
-    return this.authService.validateJWTUser(userId);
-  }
-  // async validate(payload: any) {
-  //   return await this.userRepo.findOne({
-  //     where: { id: payload.sub },
-  //     relations: ['role'],
-  //   });
-  // }
-}
+  async validate(payload: JwtPayload) {
+    if (!payload) {
+      throw new UnauthorizedException('Invalid token');
+    }
 
-// async validate(payload: any) {
-//   return payload; // becomes req.user
+    const employee = await this.employeesService.findById(payload.employeeId);
+
+    if (!employee) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
+    return employee;
+  }
+}

@@ -1,143 +1,252 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 
-import { UserService } from '../user/user.service';
-import { compare } from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { AuthJwtPayload } from './types/auth-jwtPayload';
-import { CurrentUser } from './types/current.user';
-import refresh_jwtConfig from '../../config/refresh_jwt.config';
-import type { ConfigType } from '@nestjs/config';
-import * as argon2 from 'argon2';
+import { ConfigService } from '@nestjs/config';
+
+import { InjectRepository } from '@nestjs/typeorm';
+
+import { Repository } from 'typeorm';
+
+import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
+import { EmployeesService } from '../employees/employees.service';
+
+import { LoginDto } from './dto/login.dto';
+
+import { RefreshToken } from './entities/refresh-token.entity';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private userservice: UserService,
     private jwtService: JwtService,
-    @Inject(refresh_jwtConfig.KEY)
-    private refreshtokenConfig: ConfigType<typeof refresh_jwtConfig>,
+
+    private employeesService: EmployeesService,
+    private configService: ConfigService,
+
+    @InjectRepository(RefreshToken)
+    private refreshTokenRepository: Repository<RefreshToken>,
   ) {}
 
-  async validateUser(email: string, password: string) {
-    const user = await this.userservice.findByEmail(email);
-    if (!user)
-      throw new UnauthorizedException(
-        "We don't know who you are!!...., So First Register yourSelf Please!",
-      );
-
-    const isPasswordMatch = await compare(password, user.password);
-    if (!isPasswordMatch)
-      throw new UnauthorizedException(
-        'Bro Your Password Is Wrong.... Please check the password Please',
-      );
-
-    const name = `${user.first_name} ${user.last_name}`;
-
-    return {
-      id: user.id,
-      Username: name,
-      // Username: user.first_name,
-      // Userlastname: user.last_name,
-      role: user.role.name,
-    };
-  }
-
-  async login(user: { id: string; role: string; Username?: string }) {
-    // const payload: AuthJwtPayload = {
-    //   sub: user.id,
-    //   role: user.role,
-    // };
-    // const token = this.jwtService.sign(payload);
-    // const refreshToken = this.jwtService.sign(payload, this.refreshtokenConfig);
-
-    await this.userservice.updateLastLogin(user.id);
-    const { accesstoken, refreshToken } = await this.generateToken(user);
-    const hashedRefreshToken = await argon2.hash(refreshToken);
-    await this.userservice.updateHashedreFreshToken(
-      user.id,
-      hashedRefreshToken,
+  async login(dto: LoginDto) {
+    const employee = await this.employeesService.findByIdentifier(
+      dto.identifier,
     );
-    return {
-      access_token: accesstoken,
-      
-      user: {
-        id: user.id,
-        username: user.Username,
-        role: user.role,
+
+    if (!employee) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      employee.password,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const payload = {
+      sub: employee.id,
+      employeeId: employee.id,
+      employeeCode: employee.employeeCode,
+      roleId: employee.roleId,
+    };
+
+    // Access token
+    const accessToken = await this.jwtService.signAsync(payload);
+
+    // Refresh config
+    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+
+    const refreshExpiresIn =
+      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d';
+
+    // UNIQUE refresh payload
+    const refreshPayload = {
+      ...payload,
+      jti: randomUUID(),
+    };
+
+    // Refresh token
+    const refreshToken = await this.jwtService.signAsync(refreshPayload, {
+      secret: refreshSecret!,
+      expiresIn: refreshExpiresIn as '7d',
+    });
+
+    // Hash token
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+
+    // Revoke previous tokens
+    await this.refreshTokenRepository.update(
+      {
+        employeeId: employee.id,
+        isRevoked: false,
       },
-      Refresh_Token: refreshToken,
-    };
-  }
-
-  async validateJWTUser(userId: string) {
-    const user = await this.userservice.findOne(userId);
-    if (!user) throw new UnauthorizedException('User Not Found ....');
-
-    const currentUser: CurrentUser = { id: user.id, role: user.role.name };
-    return currentUser;
-  }
-
-  async refreshToken(userId: { id: string; role: string }) {
-    const { accesstoken, refreshToken } = await this.generateToken(userId);
-    const hashedRefreshToken = await argon2.hash(refreshToken);
-    await this.userservice.updateHashedreFreshToken(
-      userId.id,
-      hashedRefreshToken,
+      {
+        isRevoked: true,
+      },
     );
+
+    // Save new refresh token
+    await this.refreshTokenRepository.save({
+      employeeId: employee.id,
+      tokenHash: hashedRefreshToken,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isRevoked: false,
+    });
+
     return {
-      access_token: accesstoken,
-      Refresh_Token: refreshToken,
+      accessToken,
+      refreshToken,
 
-      user: {
-        id: userId.id,
-
-        role: userId.role,
+      employee: {
+        id: employee.id,
+        employeeCode: employee.employeeCode,
+        email: employee.email,
+        role: employee.role,
       },
     };
   }
 
-  async generateToken(userId: { id: string; role: string }) {
-    const payload: AuthJwtPayload = {
-      sub: userId.id,
-      role: userId.role,
-    };
+  async refreshToken(refreshToken: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
 
-    const [accesstoken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload),
-      this.jwtService.signAsync(payload, this.refreshtokenConfig),
-    ]);
+      const savedTokens = await this.refreshTokenRepository.find({
+        where: {
+          employeeId: payload.employeeId,
+          isRevoked: false,
+        },
+      });
 
-    return {
-      accesstoken,
-      refreshToken,
-    };
+      if (!savedTokens.length) {
+        throw new UnauthorizedException('Session expired');
+      }
+
+      let matchedToken: RefreshToken | null = null;
+
+      for (const token of savedTokens) {
+        const isMatch = await bcrypt.compare(refreshToken, token.tokenHash);
+
+        if (isMatch) {
+          matchedToken = token;
+          break;
+        }
+      }
+
+      if (!matchedToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Expiry check
+      if (matchedToken.expiresAt < new Date()) {
+        throw new UnauthorizedException('Refresh token expired');
+      }
+
+      const employee = await this.employeesService.findById(payload.employeeId);
+
+      if (!employee) {
+        throw new UnauthorizedException('Employee not found');
+      }
+
+      const newPayload = {
+        sub: employee.id,
+        employeeId: employee.id,
+        employeeCode: employee.employeeCode,
+        roleId: employee.roleId,
+      };
+
+      // Generate access token
+      const accessToken = await this.jwtService.signAsync(newPayload);
+
+      // IMPORTANT: unique refresh token
+      const refreshPayload = {
+        ...newPayload,
+        jti: randomUUID(),
+      };
+
+      // Generate refresh token
+      const newRefreshToken = await this.jwtService.signAsync(refreshPayload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.get('JWT_REFRESH_EXPIRES_IN') as '7d',
+      });
+
+      // Revoke old token
+      matchedToken.isRevoked = true;
+
+      await this.refreshTokenRepository.save(matchedToken);
+
+      // Save new token
+      const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 10);
+
+      await this.refreshTokenRepository.save({
+        employeeId: employee.id,
+        tokenHash: hashedRefreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        isRevoked: false,
+      });
+
+      return {
+        accessToken,
+        refreshToken: newRefreshToken,
+      };
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
-  async validateRefreshToken(userId: string, refreshToken: string) {
-    const user = await this.userservice.findOne(userId);
-    if (!user || !user.hashedRefreshToken)
-      throw new UnauthorizedException('yeh Refresh Token Galat Hai Mera Bhai , yeh fir logout hogya hai tu');
+  async logout(refreshToken: string) {
+    try {
+      // Verify refresh token
+      const payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
 
-    const MatchRefreshToken = await argon2.verify(
-      user.hashedRefreshToken,
-      refreshToken,
-    );
-    if (!MatchRefreshToken)
-      throw new UnauthorizedException(
-        'MERE BHAI REFRESH TOKEN SAME NHI HAI MERA BHAI ....!!!!',
-      );
+      // Get active employee tokens
+      const tokens = await this.refreshTokenRepository.find({
+        where: {
+          employeeId: payload.employeeId,
+          isRevoked: false,
+        },
+      });
 
-    return {
-      id: user.id,
-      role: user.role.name,
-    };
-  }
+      if (!tokens.length) {
+        throw new UnauthorizedException('Session expired');
+      }
 
-  async logOut(userId: string) {
-    await this.userservice.updateHashedreFreshToken(userId, null);
+      let matchedToken: RefreshToken | null = null;
 
-    return {
-      message: 'Logged out successfully Refresh token null',
-    };
+      // Match token hash
+      for (const token of tokens) {
+        const isMatch = await bcrypt.compare(refreshToken, token.tokenHash);
+
+        if (isMatch) {
+          matchedToken = token;
+          break;
+        }
+      }
+
+      if (!matchedToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Expiry check
+      if (matchedToken.expiresAt < new Date()) {
+        throw new UnauthorizedException('Refresh token expired');
+      }
+
+      // Revoke token
+      matchedToken.isRevoked = true;
+
+      await this.refreshTokenRepository.save(matchedToken);
+
+      return {
+        message: 'Logged out successfully',
+      };
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 }

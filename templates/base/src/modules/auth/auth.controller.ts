@@ -1,50 +1,49 @@
-import {
-  Controller,
-  Post,
-  Get,
-  UseGuards,
-  Request,
-  HttpCode,
-  HttpStatus,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
+
 import { AuthService } from './auth.service';
-import { LocalAuthGuard } from '../../common/guards/local-auth/local-auth.guard';
-import { UserService } from '../user/user.service';
-import { RefreshAuthGuard } from '../../common/guards/refresh-auth/refresh-auth.guard';
-import { Public } from '../../common/decorators/pubilic.decorator';
+
+import { LoginDto } from './dto/login.dto';
+import { Public } from './decorators/public.decorator';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { LogoutDto } from './dto/logout.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private authService: AuthService,
-    private userService: UserService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Public()
-  @UseGuards(LocalAuthGuard)
   @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async login(@Request() req) {
-    return this.authService.login(req.user);
+  login(
+    @Body()
+    dto: LoginDto,
+  ) {
+    return this.authService.login(dto);
   }
 
-  // @UseGuards(JwtAuthGuard)
   @Get('me')
-  getMe(@Req() req) {
-    return this.userService.findOne(req.user.id)
+  getProfile(
+    @CurrentUser()
+    user: any,
+  ) {
+    return user;
   }
 
-  @UseGuards(RefreshAuthGuard)
-  @Post('refresh')
-  refreshToken(@Req() req) {
-    return this.authService.refreshToken(req.user.id);
+  @Public()
+  @Post('refresh-token')
+  refreshToken(
+    @Body()
+    dto: RefreshTokenDto,
+  ) {
+    return this.authService.refreshToken(dto.refreshToken);
   }
 
-  // @UseGuards(JwtAuthGuard)
+  @Public()
   @Post('logout')
-  logOut(@Req() req) {
-    this.authService.logOut(req.user.id)
-    return { message: 'User Refresh Token Delete' };
+  logout(
+    @Body()
+    dto: LogoutDto,
+  ) {
+    return this.authService.logout(dto.refreshToken);
   }
 }

@@ -1,7 +1,7 @@
-// roles.decorator.ts
 import { SetMetadata } from '@nestjs/common';
 
-export const Roles_Key = 'roles';
+import { RoleEnum } from '../enums/role.enum';
 
-// export const Roles = (...roles: RoleEnum[]) => SetMetadata(Roles_Key, roles);
-export const Roles = (...roles: string[]) => SetMetadata(Roles_Key, roles);
+export const ROLES_KEY = 'roles';
+
+export const Roles = (...roles: RoleEnum[]) => SetMetadata(ROLES_KEY, roles);

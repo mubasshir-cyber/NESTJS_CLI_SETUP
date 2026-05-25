@@ -1,18 +1,26 @@
-import { ConfigModule } from '@nestjs/config';
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { UserModule } from './modules/user/user.module';
-import { AuthModule } from './modules/auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RoleModule } from './modules/role/role.module';
-import { ProjectModule } from './modules/project/project.module';
-import { TaskModule } from './modules/task/task.module';
-import { AttendanceModule } from './modules/attendance/attendance.module';
-import { StandupsModule } from './modules/standups/standups.module';
-import { ReportsModule } from './modules/reports/reports.module';
 import { APP_GUARD } from '@nestjs/core';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+
+import { RolesModule } from './modules/roles/roles.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { EmployeesModule } from './modules/employees/employees.module';
+
+import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+import { DepartmentsModule } from './modules/departments/departments.module';
+import { DesignationsModule } from './modules/designations/designations.module';
+import { EmployeeDocumentsModule } from './modules/employee-documents/employee-documents.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { LeaveController } from './modules/attendance/Controller/leave-controller.controller';
+import { ScheduleModule } from '@nestjs/schedule';
+import { HolidayModule } from './modules/holiday/holiday.module';
+import { WeekendSettingsModule } from './modules/weekend_settings/weekend_settings.module';
+import { LeaveBalanceModule } from './modules/leave-balance/leave-balance.module';
+
 
 @Module({
   imports: [
@@ -21,31 +29,40 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
       envFilePath: '.env',
     }),
 
+    ScheduleModule.forRoot(),
+
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST,
-      port: 5432,
+      port: Number(process.env.DB_PORT),
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
       entities: ['dist/**/*.entity.js'],
+      migrations: ['dist/database/migrations/*.js'],
       synchronize: false,
     }),
-    UserModule,
+
+    RolesModule,
+    PermissionsModule,
     AuthModule,
-    RoleModule,
-    ProjectModule,
-    TaskModule,
-    AttendanceModule,
-    StandupsModule,
-    ReportsModule,
+    EmployeesModule,
+   
   ],
-  controllers: [AppController],
+
   providers: [
-    AppService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })
