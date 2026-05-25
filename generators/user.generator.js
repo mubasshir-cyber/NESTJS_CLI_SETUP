@@ -10,7 +10,7 @@ const __filename = fileURLToPath(
 
 const __dirname = path.dirname(__filename);
 
-export async function generateUserModule(
+export async function generateEmployeeModule(
   projectPath,
 ) {
   const templatePath = path.join(
@@ -20,14 +20,14 @@ export async function generateUserModule(
     'base',
     'src',
     'modules',
-    'users',
+    'employees',
   );
 
   const destinationPath = path.join(
     projectPath,
     'src',
     'modules',
-    'users',
+    'employees',
   );
 
   await fs.mkdirp(destinationPath);
@@ -42,33 +42,33 @@ export async function generateUserModule(
 
   const files = [
     {
-      template: 'entities/user.entity.ts',
-      output: 'entities/user.entity.ts',
+      template: 'entities/employee.entity.ts',
+      output: 'entities/employee.entity.ts',
     },
     {
       template:
-        'dto/create-user.dto.ts',
-      output: 'dto/create-user.dto.ts',
+        'dto/create-employee.dto.ts',
+      output: 'dto/create-employee.dto.ts',
     },
     {
       template:
-        'dto/update-user.dto.ts',
-      output: 'dto/update-user.dto.ts',
+        'dto/update-employee.dto.ts',
+      output: 'dto/update-employee.dto.ts',
     },
     {
       template:
-        'users.service.ts',
-      output: 'users.service.ts',
+        'employees.service.ts',
+      output: 'employees.service.ts',
     },
     {
       template:
-        'users.controller.ts',
-      output: 'users.controller.ts',
+        'employees.controller.ts',
+      output: 'employees.controller.ts',
     },
     {
       template:
-        'users.module.ts',
-      output: 'users.module.ts',
+        'employees.module.ts',
+      output: 'employees.module.ts',
     },
   ];
 
@@ -81,6 +81,6 @@ export async function generateUserModule(
   }
 
   console.log(
-    '✅ Users module generated',
+    '✅ Employees module generated',
   );
 }

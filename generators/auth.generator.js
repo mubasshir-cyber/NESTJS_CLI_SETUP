@@ -1,113 +1,91 @@
-import fs from 'fs-extra';
+import fs from "fs-extra";
 
-import path from 'path';
+import path from "path";
 
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(
-  import.meta.url,
-);
+const __filename = fileURLToPath(import.meta.url);
 
 const __dirname = path.dirname(__filename);
 
-export async function generateAuthModule(
-  projectPath,
-) {
+export async function generateAuthModule(projectPath) {
   const templatePath = path.join(
     __dirname,
-    '..',
-    'templates',
-    'base',
-    'src',
-    'modules',
-    'auth',
+    "..",
+    "templates",
+    "base",
+    "src",
+    "modules",
+    "auth",
   );
 
-  const destinationPath = path.join(
-    projectPath,
-    'src',
-    'modules',
-    'auth',
-  );
+  const destinationPath = path.join(projectPath, "src", "modules", "auth");
 
   await fs.mkdirp(destinationPath);
 
-  await fs.mkdirp(
-    path.join(destinationPath, 'dto'),
-  );
+  await fs.mkdirp(path.join(destinationPath, "dto"));
 
-  await fs.mkdirp(
-    path.join(destinationPath, 'guards'),
-  );
+  await fs.mkdirp(path.join(destinationPath, "guards"));
 
-  await fs.mkdirp(
-    path.join(destinationPath, 'strategies'),
-  );
+  await fs.mkdirp(path.join(destinationPath, "strategies"));
 
   const files = [
     {
-      template:
-        'dto/login.dto/login.dto.ts',
+      template: "dto/login.dto.ts",
 
-      output: 'dto/login.dto.ts',
+      output: "dto/login.dto.ts",
     },
 
     {
-      template:
-        'dto/register.dto/register.dto.ts',
+      template: "dto/logout.dto.ts",
 
-      output: 'dto/register.dto.ts',
+      output: "dto/logout.dto.ts",
     },
 
     {
-      template:
-        'strategies/jwt.strategy.ts',
+      template: "dto/refresh-token.dto.ts",
 
-      output:
-        'strategies/jwt.strategy.ts',
+      output: "dto/refresh-token.dto.ts",
     },
 
     {
-      template:
-        '../../common/guards/jwt-auth.guard/jwt-auth.guard.ts',
+      template: "strategies/jwt.strategy.ts",
 
-      output:
-        '../../common/guards/jwt-auth.guard.ts',
+      output: "strategies/jwt.strategy.ts",
     },
 
     {
-      template:
-        '../../common/interfaces/jwt-payload.interface.ts',
+      template: "guards/jwt-auth.guard.ts",
 
-      output:
-        'interfaces/jwt-payload.interface.ts',
-    },
-    {
-      template:
-        '../../config/database.config.ts',
-      output:
-        '../../config/database.config.ts',
+      output: "guards/jwt-auth.guard.ts",
     },
 
     {
-      template:
-        'auth.service.ts',
+      template: "types/jwt-payload.interface.ts",
 
-      output: 'auth.service.ts',
+      output: "types/jwt-payload.interface.ts",
+    },
+    {
+      template: "../../config/database.config.ts",
+      output: "../../config/database.config.ts",
     },
 
     {
-      template:
-        'auth.controller.ts',
+      template: "auth.service.ts",
 
-      output: 'auth.controller.ts',
+      output: "auth.service.ts",
     },
 
     {
-      template:
-        'auth.module.ts',
+      template: "auth.controller.ts",
 
-      output: 'auth.module.ts',
+      output: "auth.controller.ts",
+    },
+
+    {
+      template: "auth.module.ts",
+
+      output: "auth.module.ts",
     },
   ];
 
@@ -119,7 +97,5 @@ export async function generateAuthModule(
     );
   }
 
-  console.log(
-    '✅ Auth module generated',
-  );
+  console.log("✅ Auth module generated");
 }
