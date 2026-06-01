@@ -60,14 +60,14 @@ export async function generateAuthModule(projectPath) {
       output: "guards/jwt-auth.guard.ts",
     },
 
-    {
-      template: "types/jwt-payload.interface.ts",
+    // {
+    //   template: "types/jwt-payload.interface.ts",
 
-      output: "types/jwt-payload.interface.ts",
-    },
+    //   output: "types/jwt-payload.interface.ts",
+    // },
     {
-      template: "../../config/database.config.ts",
-      output: "../../config/database.config.ts",
+      template: "../../database/data-source.ts",
+      output: "../../database/data-source.ts",
     },
 
     {

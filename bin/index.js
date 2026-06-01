@@ -9,8 +9,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { Command } from "commander";
 
-import { generateUserModule } from "../generators/user.generator.js";
+
 import { generateAuthModule } from "../generators/auth.generator.js";
+import { generateEmployeeModule } from "../generators/employee.generator.js";
 import { generateResource } from "../generators/resource.generator.js";
 import { checkNestProject } from "../utils/check-project.js";
 
@@ -109,11 +110,11 @@ program
       // GENERATE USERS MODULE
       //
 
-      spinner.start("Generating Users module...");
+      spinner.start("Generating Employees module...");
 
-      await generateUserModule(projectPath);
+      await generateEmployeeModule(projectPath);
 
-      spinner.succeed("Users module generated");
+      spinner.succeed("Employees module generated");
 
       //
       // GENERATE AUTH MODULE
